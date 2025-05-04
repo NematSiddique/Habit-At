@@ -1,15 +1,70 @@
-import React,{ useState, useEffect } from 'react';
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import { BrowserRouter, useNavigate, Routes, Route, Navigate } from 'react-router-dom';
+import toast, { Toaster } from 'react-hot-toast';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-// import HabitCard from '../components/HabitCard';
-import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
-// import { useTheme } from '../context/ThemeContext';
-import { useTheme } from '../App'
+// import Dashboard from './pages/Dashboard';
 import { Calendar, Clock, Zap, Trash2, Minus, Plus, Bell, BellOff, MessageSquare, PlusCircle, Target, Save, X, Moon, Sun } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
 import { Chart, registerables } from 'chart.js';
-// import { s
 
+ interface ProgressEntry {
+  _id: string;
+  date: string; // ISO date string
+  progress: number; // 0–100 percentage
+}
+
+interface Reminder {
+  enabled: boolean;
+  time: string; // "HH:MM" format
+  message: string;
+}
+
+interface Habit {
+  _id: string;
+  name: string;
+  completed: boolean;
+  streak: number;
+  progressLog: ProgressEntry[];
+  createdAt: string;
+  updatedAt: string;
+  reminder: Reminder;
+}
+
+const ThemeContext = createContext({ theme: 'light', toggleTheme: () => {} });
+const getDefaultTheme = () => {
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return prefersDark ? "dark" : "light";
+};
+// ThemeProvider component
+const ThemeProvider = ({ children }) => {
+  const [theme, setTheme] = useState('light');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    setTheme(savedTheme);
+    document.body.classList.remove('light', 'dark');
+    document.body.classList.add(savedTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.body.classList.remove('light', 'dark');
+    document.body.classList.add(newTheme);
+  };
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+
+// Custom hook
+export const useTheme = () => useContext(ThemeContext);
 
 Chart.register(...registerables);
 
@@ -34,41 +89,31 @@ const AnimatedBackground = () => {
   );
 };
 
-const HabitModal = ({ isOpen, onClose, onHabitCreated }) => {
-  const [newHabitName, setNewHabitName] = useState('');
+
+interface HabitModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onHabitCreated?: (habit: Habit) => void;
+}
+
+const HabitModal = ({ isOpen, onClose, onHabitCreated }: HabitModalProps) => {
+  const [newHabitName, setNewHabitName] = useState("");
   const { theme } = useTheme();
-  
-  const handleSubmit = async (e) => {
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!newHabitName.trim()) return;
 
     try {
-      // Create the habit with the API
-      const response = await createHabit(newHabitName);
-      
-      // Prepare habit object for the parent component
-      // Assuming your API returns the habit data directly or within a data property
-      const newHabit = response.data || response;
-      
-      // Create a properly formatted habit object if needed
-      const formattedHabit = {
-        _id: newHabit._id || `habit-${Date.now()}`, // Ensure _id exists since your UI uses it
-        name: newHabitName,
-        created: new Date().toISOString(),
-        streak: 0,
-        completedToday: false,
-        ...newHabit // Preserve any other fields from the API response
-      };
-      
-      // Reset form and notify parent
-      setNewHabitName('');
-      toast.success('Habit created successfully');
-      if (onHabitCreated) {
-        onHabitCreated(formattedHabit);
-      }
+      const newHabit = await createHabit(newHabitName); // Should return a Habit
+
+      toast.success("Habit created successfully");
+      setNewHabitName("");
+
+      if (onHabitCreated) onHabitCreated(newHabit);
       onClose();
     } catch (error) {
-      toast.error('Failed to create habit');
+      toast.error("Failed to create habit");
       console.error(error);
     }
   };
@@ -77,118 +122,148 @@ const HabitModal = ({ isOpen, onClose, onHabitCreated }) => {
 
   return (
     <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black bg-opacity-50"
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {/* Backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 bg-black bg-opacity-50"
+          onClick={onClose}
+        />
+
+        {/* Modal */}
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.95 }}
+          transition={{ duration: 0.2 }}
+          className={`relative max-w-lg w-full rounded-lg shadow-lg p-8 m-4 ${
+            theme === "dark" ? "bg-gray-800" : "bg-white"
+          }`}
+        >
+          {/* Close button */}
+          <button
+            title="Close"
             onClick={onClose}
-          />
-          
-          {/* Modal */}
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className={`relative max-w-lg w-full rounded-lg shadow-lg p-8 m-4 ${
-              theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+            className={`absolute top-4 right-4 p-1 rounded-full ${
+              theme === "dark"
+                ? "text-gray-300 hover:bg-gray-700"
+                : "text-gray-600 hover:bg-gray-100"
             }`}
           >
-            {/* Close button */}
-            <button 
-              onClick={onClose}
-              className={`absolute top-4 right-4 p-1 rounded-full ${
-                theme === 'dark' ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'
+            <X className="h-5 w-5" />
+          </button>
+
+          <div className="text-center mb-8">
+            <img
+              src="https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=800&q=80"
+              alt="Create new habit"
+              className="w-24 h-24 object-cover rounded-full mx-auto mb-4"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.onerror = null;
+                target.src = "/api/placeholder/120/120";
+              }}
+            />
+            <h1
+              className={`text-2xl font-bold ${
+                theme === "dark" ? "text-white" : "text-gray-900"
               }`}
             >
-              <X className="h-5 w-5" />
-            </button>
-            
-            <div className="text-center mb-8">
-              <img
-                src="https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=800&q=80"
-                alt="Create new habit"
-                className="w-24 h-24 object-cover rounded-full mx-auto mb-4"
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = "/api/placeholder/120/120";
-                }}
-              />
-              <h1 className={`text-2xl font-bold ${
-                theme === 'dark' ? 'text-white' : 'text-gray-900'
-              }`}>Create New Habit</h1>
-              <p className={`${
-                theme === 'dark' ? 'text-gray-300' : 'text-gray-600'
-              }`}>Define your new habit and start tracking your progress</p>
+              Create New Habit
+            </h1>
+            <p
+              className={`${
+                theme === "dark" ? "text-gray-300" : "text-gray-600"
+              }`}
+            >
+              Define your new habit and start tracking your progress
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label
+                className={`block text-sm font-medium mb-2 ${
+                  theme === "dark" ? "text-gray-200" : "text-gray-700"
+                }`}
+              >
+                Habit Name
+              </label>
+              <div className="relative">
+                <Target
+                  className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${
+                    theme === "dark" ? "text-gray-400" : "text-gray-400"
+                  }`}
+                />
+                <input
+                  type="text"
+                  value={newHabitName}
+                  onChange={(e) => setNewHabitName(e.target.value)}
+                  className={`pl-10 w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                    theme === "dark"
+                      ? "bg-gray-700 text-white border-gray-600"
+                      : "bg-white text-black border-gray-300"
+                  }`}
+                  placeholder="e.g., Daily Exercise"
+                  required
+                  autoFocus
+                />
+              </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  theme === 'dark' ? 'text-gray-200' : 'text-gray-700'
-                }`}>
-                  Habit Name
-                </label>
-                <div className="relative">
-                  <Target className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${
-                    theme === 'dark' ? 'text-gray-400' : 'text-gray-400'
-                  }`} />
-                  <input
-                    type="text"
-                    value={newHabitName}
-                    onChange={(e) => setNewHabitName(e.target.value)}
-                    className={`pl-10 w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-                      theme === 'dark'
-                        ? 'bg-gray-700 text-white border-gray-600'
-                        : 'bg-white text-black border-gray-300'
-                    }`}
-                    placeholder="e.g., Daily Exercise"
-                    required
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-4 pt-6">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className={`inline-flex items-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
-                    theme === 'dark'
-                      ? 'border-gray-600 text-gray-300 bg-gray-700 hover:bg-gray-600'
-                      : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
-                  }`}
-                >
-                  <X className="h-5 w-5 mr-2" />
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                >
-                  <Save className="h-5 w-5 mr-2" />
-                  Create Habit
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
+            <div className="flex justify-end space-x-4 pt-6">
+              <button
+                type="button"
+                onClick={onClose}
+                className={`inline-flex items-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
+                  theme === "dark"
+                    ? "border-gray-600 text-gray-300 bg-gray-700 hover:bg-gray-600"
+                    : "border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                }`}
+              >
+                <X className="h-5 w-5 mr-2" />
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                <Save className="h-5 w-5 mr-2" />
+                Create Habit
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      </div>
     </AnimatePresence>
   );
 };
 
-const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) => {
+interface HabitDetailModalProps {
+  habit: Habit | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onDelete: (habitId: string) => void;
+}
+
+const HabitDetailModal = ({
+  habit: initialHabit,
+  isOpen,
+  onClose,
+  onDelete,
+}: HabitDetailModalProps) => {
   const { theme } = useTheme();
-  const [habit, setHabit] = useState(null);
+
+  // const [habit, setHabit] = useState(null);
+  const [habit, setHabit] = useState<Habit | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [progressLog, setProgressLog] = useState([]);
-  const [lastProgressUpdate, setLastProgressUpdate] = useState(null);
+  // const [progressLog, setProgressLog] = useState([]);
+  const [progressLog, setProgressLog] = useState<ProgressEntry[]>([]); // Explicitly define the type as ProgressEntry[]
+  // const [lastProgressUpdate, setLastProgressUpdate] = useState(null);
+  const [lastProgressUpdate, setLastProgressUpdate] = useState<number | null>(null);
   const [sliderValue, setSliderValue] = useState(0);
   
   // Reminder states
@@ -204,7 +279,8 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
       
       setIsLoading(true);
       try {
-        const data = await getHabitById(initialHabit._id);
+        // const data = await getHabitById(initialHabit._id);
+        const data: Habit = (await getHabitById(initialHabit._id)) as Habit;
         setHabit(data);
         setProgressLog(data.progressLog || []);
         
@@ -236,6 +312,11 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
   }, [initialHabit]);
 
   const handleDelete = async () => {
+    if (!habit) {
+      toast.error('Habit not found');
+      return;
+    }
+  
     try {
       await deleteHabit(habit._id);
       toast.success('Habit deleted successfully');
@@ -247,18 +328,28 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
     }
   };
 
-  // Function to update progress when slider is released or a value is directly set
-  const handleProgressUpdate = async (progress) => {
+  const handleProgressUpdate = async (progress: number) => {
+    if (!habit) {
+      toast.error('Habit not found');
+      return;
+    }
+  
     try {
       const updatedHabit = await updateHabit(habit._id, { newProgress: progress });
+  
+      if (!updatedHabit) {
+        toast.error('Failed to update habit');
+        return;
+      }
+  
       setHabit(updatedHabit);
       setProgressLog(updatedHabit.progressLog);
-      
+  
       const lastProgress = updatedHabit.progressLog[updatedHabit.progressLog.length - 1].progress;
       setLastProgressUpdate(lastProgress);
       setSliderValue(lastProgress);
       localStorage.setItem(`lastProgressUpdate-${habit._id}`, JSON.stringify(lastProgress));
-      
+  
       toast.success(progress === 100 
         ? 'Great job! Habit completed for today!' 
         : 'Progress updated successfully');
@@ -278,8 +369,13 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
     handleProgressUpdate(sliderValue);
   };
 
-  // Reminder functions
+
   const handleToggleReminder = async () => {
+    if (!habit) {
+      toast.error('Habit not found');
+      return;
+    }
+  
     try {
       let updatedHabit;
       if (reminderEnabled) {
@@ -289,7 +385,13 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
         updatedHabit = await enableReminder(habit._id);
         toast.success('Reminder enabled');
       }
-      
+  
+      // Check if updatedHabit is null before using it
+      if (!updatedHabit) {
+        toast.error('Failed to update habit reminder');
+        return;
+      }
+  
       setHabit(updatedHabit);
       setReminderEnabled(updatedHabit.reminder.enabled);
     } catch (error) {
@@ -297,13 +399,40 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
       console.error(error);
     }
   };
+  
 
-  const handleTimeChange = async (e) => {
+  // const handleTimeChange = async (e) => {
+  //   const newTime = e.target.value;
+  //   setReminderTime(newTime);
+    
+  //   try {
+  //     const updatedHabit = await updateReminderTime(habit._id, newTime);
+  //     setHabit(updatedHabit);
+  //     toast.success('Reminder time updated');
+  //   } catch (error) {
+  //     toast.error('Failed to update reminder time');
+  //     console.error(error);
+  //   }
+  // };
+
+  const handleTimeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = e.target.value;
     setReminderTime(newTime);
     
+    if (!habit) {
+      toast.error('Habit not found');
+      return;
+    }
+  
     try {
       const updatedHabit = await updateReminderTime(habit._id, newTime);
+  
+      // Check if updatedHabit is null
+      if (!updatedHabit) {
+        toast.error('Failed to update reminder time');
+        return;
+      }
+  
       setHabit(updatedHabit);
       toast.success('Reminder time updated');
     } catch (error) {
@@ -311,16 +440,48 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
       console.error(error);
     }
   };
+  
 
+  // const handleMessageUpdate = async () => {
+  //   try {
+  //     const updatedHabit = await updateHabit(habit._id, { 
+  //       reminder: {
+  //         ...habit.reminder,
+  //         message: reminderMessage
+  //       }
+  //     });
+      
+  //     setHabit(updatedHabit);
+  //     setIsEditingMessage(false);
+  //     toast.success('Reminder message updated');
+  //   } catch (error) {
+  //     toast.error('Failed to update reminder message');
+  //     console.error(error);
+  //   }
+  // };
+
+  // Check if a habit should display a reminder for today
+  
   const handleMessageUpdate = async () => {
+    if (!habit) {
+      toast.error('Habit not found');
+      return;
+    }
+  
     try {
       const updatedHabit = await updateHabit(habit._id, { 
         reminder: {
           ...habit.reminder,
-          message: reminderMessage
-        }
+          message: reminderMessage,
+        },
       });
-      
+  
+      // Check if updatedHabit is null
+      if (!updatedHabit) {
+        toast.error('Failed to update reminder message');
+        return;
+      }
+  
       setHabit(updatedHabit);
       setIsEditingMessage(false);
       toast.success('Reminder message updated');
@@ -329,8 +490,8 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
       console.error(error);
     }
   };
+  
 
-  // Check if a habit should display a reminder for today
   const shouldShowReminder = () => {
     if (!habit || !habit.reminder || !habit.reminder.enabled) return false;
     
@@ -345,22 +506,30 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
     return !hasProgressForToday;
   };
 
-  // Get time comparison for reminder
-  const getReminderStatus = () => {
+
+  const getReminderStatus = (): string | null => {
     if (!habit || !habit.reminder || !habit.reminder.enabled) return null;
-    
+  
     const now = new Date();
-    const [hours, minutes] = habit.reminder.time.split(':').map(Number);
+    
+    // Split time string and ensure hours and minutes are valid numbers
+    const [hours, minutes] = habit.reminder.time.split(':').map(str => parseInt(str, 10));
+  
+    // Check if parsing the hours and minutes was successful
+    if (isNaN(hours) || isNaN(minutes)) {
+      return 'Invalid reminder time';
+    }
+  
     const reminderTime = new Date();
     reminderTime.setHours(hours, minutes, 0, 0);
-    
-    const timeDiff = reminderTime - now;
-    
+  
+    const timeDiff = reminderTime.getTime() - now.getTime();
+  
     if (timeDiff > 0) {
       // Reminder is in the future
       const hoursLeft = Math.floor(timeDiff / (1000 * 60 * 60));
       const minutesLeft = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-      
+  
       if (hoursLeft > 0) {
         return `Reminder in ${hoursLeft}h ${minutesLeft}m`;
       } else {
@@ -371,6 +540,7 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
       return "Reminder time has passed";
     }
   };
+  
 
   if (!isOpen) return null;
 
@@ -403,6 +573,7 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
                 </div>
                 <div className="space-x-2 sm:space-x-4">
                   <button
+                  title='7'
                     onClick={onClose}
                     className={`p-2 rounded-full transition-colors ${
                       theme === 'dark'
@@ -415,6 +586,7 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
                     </svg>
                   </button>
                   <button
+                  title='8'
                     onClick={() => setShowDeleteConfirm(true)}
                     className={`p-2 rounded-full transition-colors ${
                       theme === 'dark'
@@ -434,11 +606,17 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
                     title: 'Streak', 
                     value: `${habit.streak} days` 
                   },
+                  // { 
+                  //   icon: Clock, 
+                  //   title: 'Today\'s Progress', 
+                  //   value: `${lastProgressUpdate}%`,
+                  //   color: parseInt(lastProgressUpdate) === 100 ? 'text-green-500' : 'text-blue-600'
+                  // },
                   { 
                     icon: Clock, 
                     title: 'Today\'s Progress', 
-                    value: `${lastProgressUpdate}%`,
-                    color: parseInt(lastProgressUpdate) === 100 ? 'text-green-500' : 'text-blue-600'
+                    value: `${lastProgressUpdate !== null ? lastProgressUpdate : 0}%`,  // Ensure it's a number
+                    color: parseInt(String(lastProgressUpdate ?? 0)) === 100 ? 'text-green-500' : 'text-blue-600'  // Convert to string first if null
                   },
                   { 
                     icon: reminderEnabled ? Bell : BellOff, 
@@ -496,6 +674,7 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
                         Enable Reminder
                       </span>
                       <button 
+                      title='1'
                         onClick={handleToggleReminder}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
                           reminderEnabled 
@@ -517,6 +696,7 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
                         Reminder Time
                       </label>
                       <input
+                        title='2'
                         type="time"
                         value={reminderTime}
                         onChange={handleTimeChange}
@@ -651,14 +831,28 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
                     <span className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                       Current progress: {lastProgressUpdate}%
                     </span>
-                    <span className={`text-sm font-medium ${parseInt(lastProgressUpdate) >= 75 ? theme === 'dark' ? 'text-blue-400' : 'text-blue-600' : theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {/* <span className={`text-sm font-medium ${parseInt(lastProgressUpdate) >= 75 ? theme === 'dark' ? 'text-blue-400' : 'text-blue-600' : theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                       {parseInt(lastProgressUpdate) >= 75 && parseInt(lastProgressUpdate) < 100  ? "Almost there!" : 
                        parseInt(lastProgressUpdate) === 100 ? "Completed!" : "Keep going!"}
-                    </span>
+                    </span> */}
+                    <span className={`text-sm font-medium ${parseInt(String(lastProgressUpdate ?? 0)) >= 75 
+  ? theme === 'dark' 
+    ? 'text-blue-400' 
+    : 'text-blue-600' 
+  : theme === 'dark' 
+    ? 'text-gray-300' 
+    : 'text-gray-700'}`}>
+  {parseInt(String(lastProgressUpdate ?? 0)) >= 75 && parseInt(String(lastProgressUpdate ?? 0)) < 100 
+    ? "Almost there!" 
+    : parseInt(String(lastProgressUpdate ?? 0)) === 100 
+    ? "Completed!" 
+    : "Keep going!"}
+</span>
                   </div>
                   
                   <div className="relative mb-4">
-                    <input 
+                    <input
+                    title='3' 
                       type="range" 
                       className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
                         theme === 'dark' ? 'bg-gray-600' : 'bg-gray-300'
@@ -695,6 +889,7 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
                         : 'bg-white border-gray-300 text-gray-700'
                     }`}>
                       <button
+                      title='4'
                         onClick={() => {
                           const newValue = Math.max(0, sliderValue - 1);
                           setSliderValue(newValue);
@@ -709,6 +904,7 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
                       </button>
                       
                       <input
+                        title='5'
                         type="number"
                         min="0"
                         max="100"
@@ -726,6 +922,7 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
                       />
                       
                       <button
+                      title='6'
                         onClick={() => {
                           const newValue = Math.min(100, sliderValue + 1);
                           setSliderValue(newValue);
@@ -769,21 +966,23 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
                     >
                       Mark as Complete
                     </button>
-                    {parseInt(lastProgressUpdate) === 100 && (
-                      <button
-                        onClick={() => {
-                          setSliderValue(0);
-                          handleProgressUpdate(0);
-                        }}
-                        className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium ${
-                          theme === 'dark'
-                            ? 'bg-gray-600 hover:bg-gray-700 text-white'
-                            : 'bg-gray-400 hover:bg-gray-500 text-white'
-                        } transition-colors`}
-                      >
-                        Reset Progress
-                      </button>
-                    )}
+                  
+                    {(lastProgressUpdate !== null && parseInt(String(lastProgressUpdate)) === 100) && (
+  <button
+    onClick={() => {
+      setSliderValue(0);
+      handleProgressUpdate(0);
+    }}
+    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium ${
+      theme === 'dark'
+        ? 'bg-gray-600 hover:bg-gray-700 text-white'
+        : 'bg-gray-400 hover:bg-gray-500 text-white'
+    } transition-colors`}
+  >
+    Reset Progress
+  </button>
+)}
+
                   </div>
                 </div>
               </div>
@@ -832,10 +1031,16 @@ const HabitDetailModal = ({ habit: initialHabit, isOpen, onClose, onDelete }) =>
   );
 };
 
-const HabitCard = ({ habit, onClick }) => {
+
+interface HabitCardProps {
+  habit: Habit;
+  onClick: () => void;
+}
+
+const HabitCard: React.FC<HabitCardProps> = ({ habit, onClick }) => {
   const [isHovered, setIsHovered] = useState(false);
 
-  const getProgressColor = (progress) => {
+  const getProgressColor = (progress: number): string => {
     if (progress === 100) return 'bg-green-500 dark:bg-green-600';
     if (progress >= 75) return 'bg-blue-500 dark:bg-blue-600';
     if (progress >= 50) return 'bg-yellow-500 dark:bg-yellow-600';
@@ -843,10 +1048,9 @@ const HabitCard = ({ habit, onClick }) => {
     return 'bg-red-500 dark:bg-red-600';
   };
 
-  const latestProgress =
-    habit.progressLog.length > 0
-      ? habit.progressLog[habit.progressLog.length - 1].progress
-      : 0;
+  const latestProgress = habit.progressLog.length
+    ? habit.progressLog[habit.progressLog.length - 1].progress
+    : 0;
 
   const formattedUpdatedAt = new Date(habit.updatedAt).toLocaleString();
 
@@ -910,7 +1114,7 @@ const HabitCard = ({ habit, onClick }) => {
       </div>
     </motion.div>
   );
-}
+};
 
 const getCurrentTimeString = () => {
   const now = new Date();
@@ -919,7 +1123,7 @@ const getCurrentTimeString = () => {
   return `${hours}:${minutes}`;
 };
 
-const mockHabits = [
+const mockHabits: Habit[] = [
   {
     _id: "habit1",
     name: "Exercise",
@@ -962,11 +1166,6 @@ const mockHabits = [
     name: "Drink Water",
     completed: false,
     streak: 3,
-    reminder: {
-      enabled: true,
-      time: "09:00",
-      message: "Stay hydrated throughout the day!",
-    },
     progressLog: [
       { date: "2025-05-01", progress: 100, _id: "log8" },
       { date: "2025-05-02", progress: 100, _id: "log9" },
@@ -974,48 +1173,48 @@ const mockHabits = [
     ],
     createdAt: "2025-04-28T06:00:00.000Z",
     updatedAt: "2025-05-03T07:00:00.000Z",
+    reminder: {
+      enabled: true,
+      time: "09:00",
+      message: "Stay hydrated throughout the day!",
+    },
   },
   {
     _id: "habit4",
     name: "Meditate",
     completed: false,
     streak: 0,
-    reminder: {
-      enabled: true,
-      time: "06:30",
-      message: "Take a moment to breathe and reflect.",
-    },
     progressLog: [
       { date: "2025-05-02", progress: 30, _id: "log11" },
       { date: "2025-05-03", progress: 50, _id: "log12" },
     ],
     createdAt: "2025-05-02T06:30:00.000Z",
     updatedAt: "2025-05-03T11:00:00.000Z",
+    reminder: {
+      enabled: true,
+      time: "06:30",
+      message: "Take a moment to breathe and reflect.",
+    },
   },
   {
     _id: "habit5",
     name: "Write Journal",
     completed: false,
     streak: 1,
+    progressLog: [{ date: "2025-05-03", progress: 100, _id: "log13" }],
+    createdAt: "2025-05-03T08:00:00.000Z",
+    updatedAt: "2025-05-03T08:10:00.000Z",
     reminder: {
       enabled: true,
       time: "22:00",
       message: "Reflect on your day in your journal.",
     },
-    progressLog: [{ date: "2025-05-03", progress: 100, _id: "log13" }],
-    createdAt: "2025-05-03T08:00:00.000Z",
-    updatedAt: "2025-05-03T08:10:00.000Z",
   },
   {
     _id: "habit6",
     name: "Learn Spanish",
     completed: false,
     streak: 0,
-    reminder: {
-      enabled: true,
-      time: "19:00",
-      message: "Time for your Spanish practice!",
-    },
     progressLog: [
       { date: "2025-05-01", progress: 20, _id: "log14" },
       { date: "2025-05-02", progress: 40, _id: "log15" },
@@ -1023,34 +1222,34 @@ const mockHabits = [
     ],
     createdAt: "2025-04-30T10:00:00.000Z",
     updatedAt: "2025-05-03T12:00:00.000Z",
+    reminder: {
+      enabled: true,
+      time: "19:00",
+      message: "Time for your Spanish practice!",
+    },
   },
   {
     _id: "habit7",
     name: "Write Code",
     completed: false,
     streak: 0,
-    reminder: {
-      enabled: true,
-      time: "17:00",
-      message: "Keep coding and stay sharp!",
-    },
     progressLog: [
       { date: "2025-05-01", progress: 50, _id: "log17" },
       { date: "2025-05-02", progress: 70, _id: "log18" },
     ],
     createdAt: "2025-05-01T05:30:00.000Z",
     updatedAt: "2025-05-03T11:30:00.000Z",
+    reminder: {
+      enabled: true,
+      time: "17:00",
+      message: "Keep coding and stay sharp!",
+    },
   },
   {
     _id: "habit8",
     name: "Cook Dinner",
     completed: false,
     streak: 2,
-    reminder: {
-      enabled: true,
-      time: "18:00",
-      message: "Get cooking a healthy dinner!",
-    },
     progressLog: [
       { date: "2025-05-01", progress: 100, _id: "log19" },
       { date: "2025-05-02", progress: 80, _id: "log20" },
@@ -1058,17 +1257,17 @@ const mockHabits = [
     ],
     createdAt: "2025-04-27T08:45:00.000Z",
     updatedAt: "2025-05-03T09:00:00.000Z",
+    reminder: {
+      enabled: true,
+      time: "18:00",
+      message: "Get cooking a healthy dinner!",
+    },
   },
   {
     _id: "habit9",
     name: "Sleep Early",
     completed: false,
     streak: 0,
-    reminder: {
-      enabled: true,
-      time: "22:30",
-      message: "Start winding down for the night.",
-    },
     progressLog: [
       { date: "2025-05-01", progress: 60, _id: "log22" },
       { date: "2025-05-02", progress: 70, _id: "log23" },
@@ -1076,29 +1275,36 @@ const mockHabits = [
     ],
     createdAt: "2025-04-25T07:00:00.000Z",
     updatedAt: "2025-05-03T08:30:00.000Z",
+    reminder: {
+      enabled: true,
+      time: "22:30",
+      message: "Start winding down for the night.",
+    },
   },
   {
     _id: "habit10",
     name: "Photography",
     completed: false,
     streak: 0,
-    reminder: {
-      enabled: true,
-      time: "16:00",
-      message: "Capture something beautiful today!",
-    },
     progressLog: [
       { date: "2025-05-01", progress: 30, _id: "log25" },
       { date: "2025-05-02", progress: 50, _id: "log26" },
     ],
     createdAt: "2025-05-01T12:00:00.000Z",
     updatedAt: "2025-05-02T15:00:00.000Z",
+    reminder: {
+      enabled: true,
+      time: "16:00",
+      message: "Capture something beautiful today!",
+    },
   },
-  // Add other existing habits here, keeping their structure consistent
 ];
 
-export const getHabits = async () => {
-  return new Promise((resolve) => setTimeout(() => resolve([...mockHabits]), 500));
+
+export const getHabits = async (): Promise<Habit[]> => {
+  return new Promise((resolve) =>
+    setTimeout(() => resolve([...mockHabits] as Habit[]), 500)
+  );
 };
 
 export const getHabitById = async (id) => {
@@ -1107,8 +1313,10 @@ export const getHabitById = async (id) => {
   );
 };
 
-export const createHabit = async (name) => {
-  const newHabit = {
+type CreateHabitInput = string;
+
+export const createHabit = async (name: CreateHabitInput): Promise<Habit> => {
+  const newHabit: Habit = {
     _id: Date.now().toString(),
     name,
     completed: false,
@@ -1122,11 +1330,19 @@ export const createHabit = async (name) => {
       message: "",
     },
   };
+
   mockHabits.push(newHabit);
   return new Promise((resolve) => setTimeout(() => resolve(newHabit), 300));
 };
 
-export const updateHabit = async (id, updatedData) => {
+type UpdateHabitInput = Partial<Omit<Habit, "_id" | "createdAt" | "progressLog">> & {
+  newProgress?: number;
+};
+
+export const updateHabit = async (
+  id: string,
+  updatedData: UpdateHabitInput
+): Promise<Habit | null> => {
   const index = mockHabits.findIndex((h) => h._id === id);
   if (index === -1) return null;
 
@@ -1134,7 +1350,9 @@ export const updateHabit = async (id, updatedData) => {
 
   if (updatedData.newProgress !== undefined) {
     const today = new Date().toISOString().slice(0, 10);
-    const existingEntryIndex = habit.progressLog.findIndex(entry => entry.date === today);
+    const existingEntryIndex = habit.progressLog.findIndex(
+      (entry) => entry.date === today
+    );
 
     if (existingEntryIndex !== -1) {
       habit.progressLog[existingEntryIndex].progress = updatedData.newProgress;
@@ -1147,31 +1365,31 @@ export const updateHabit = async (id, updatedData) => {
     }
   }
 
-  habit.streak = habit.progressLog.filter(entry => entry.progress === 100).length;
+  habit.streak = habit.progressLog.filter((entry) => entry.progress === 100).length;
 
-  const mergedHabit = {
+  const mergedHabit: Habit = {
     ...habit,
     ...updatedData,
     updatedAt: new Date().toISOString(),
   };
 
-  delete mergedHabit.newProgress;
+  delete (mergedHabit as any).newProgress;
 
   mockHabits[index] = mergedHabit;
-
   return new Promise((resolve) => setTimeout(() => resolve(mergedHabit), 300));
 };
 
-export const deleteHabit = async (id) => {
+export const deleteHabit = async (id: string): Promise<{ message: string }> => {
   const index = mockHabits.findIndex((h) => h._id === id);
   if (index !== -1) mockHabits.splice(index, 1);
-  return new Promise((resolve) => setTimeout(() => resolve({ message: "Deleted" }), 300));
+  return new Promise((resolve) =>
+    setTimeout(() => resolve({ message: "Deleted" }), 300)
+  );
 };
 
-// 🔔 Reminder Functions
 
-export const enableReminder = async (id) => {
-  const habit = mockHabits.find(h => h._id === id);
+export const enableReminder = async (id: string): Promise<Habit | null> => {
+  const habit = mockHabits.find((h) => h._id === id);
   if (!habit) return null;
 
   habit.reminder = {
@@ -1183,8 +1401,8 @@ export const enableReminder = async (id) => {
   return new Promise((resolve) => setTimeout(() => resolve(habit), 300));
 };
 
-export const disableReminder = async (id) => {
-  const habit = mockHabits.find(h => h._id === id);
+export const disableReminder = async (id: string): Promise<Habit | null> => {
+  const habit = mockHabits.find((h) => h._id === id);
   if (!habit) return null;
 
   habit.reminder = {
@@ -1196,9 +1414,14 @@ export const disableReminder = async (id) => {
   return new Promise((resolve) => setTimeout(() => resolve(habit), 300));
 };
 
-export const updateReminderTime = async (id, newTime) => {
-  const habit = mockHabits.find(h => h._id === id);
-  if (!habit || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(newTime)) return null;
+export const updateReminderTime = async (
+  id: string,
+  newTime: string
+): Promise<Habit | null> => {
+  const isValidTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(newTime);
+  const habit = mockHabits.find((h) => h._id === id);
+
+  if (!habit || !isValidTime) return null;
 
   habit.reminder = {
     ...habit.reminder,
@@ -1210,20 +1433,27 @@ export const updateReminderTime = async (id, newTime) => {
 };
 
 
-export default function Dashboard() {
-  const [habits, setHabits] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedHabit, setSelectedHabit] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isAddHabitModalOpen, setIsAddHabitModalOpen] = useState(false);
-  const [reminders, setReminders] = useState([]); // Keep your reminders state
+interface DashboardProps {
+  getHabits: () => Promise<Habit[]>; // Custom API function to fetch habits
+  onHabitCreated?: (habit: Habit) => void; // Callback when habit is created
+  onHabitDeleted?: (habitId: string) => void; // Callback when habit is deleted
+}
+
+
+const Dashboard: React.FC<DashboardProps> = ({ getHabits, onHabitCreated, onHabitDeleted }) => {
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [selectedHabit, setSelectedHabit] = useState<Habit | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isAddHabitModalOpen, setIsAddHabitModalOpen] = useState<boolean>(false);
+  const [reminders, setReminders] = useState<Reminder[]>([]); // Reminders state
   const navigate = useNavigate();
-  const { theme,toggleTheme } = useTheme();
+  const { theme, toggleTheme } = useTheme(); // Assuming theme is managed with a custom hook
 
   useEffect(() => {
     loadHabits();
-  }, []);
-  
+  }, [getHabits]);
+
   const loadHabits = async () => {
     setIsLoading(true);
     try {
@@ -1236,115 +1466,107 @@ export default function Dashboard() {
       setIsLoading(false);
     }
   };
-  
-  const handleHabitClick = (habit) => {
+
+  const handleHabitClick = (habit: Habit) => {
     setSelectedHabit(habit);
     setIsModalOpen(true);
   };
-  
+
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedHabit(null);
   };
-  
-  const handleDeleteHabit = (habitId) => {
+
+  const handleDeleteHabit = (habitId: string) => {
     setHabits(habits.filter(habit => habit._id !== habitId));
+    if (onHabitDeleted) onHabitDeleted(habitId); // Trigger on delete callback
   };
 
-  const handleHabitCreated = (newHabit) => {
-    // Make sure the newHabit has all required fields expected by HabitCard
-    const habitWithDefaults = {
+  const handleHabitCreated = (newHabit: Habit) => {
+    const habitWithDefaults: Habit = {
+      ...newHabit,
       _id: newHabit._id || `habit-${Date.now()}`,
       streak: newHabit.streak || 0,
-      completedToday: newHabit.completedToday || false,
-      ...newHabit
+      completed: newHabit.completed || false,
+      progressLog: newHabit.progressLog || [],
+      createdAt: newHabit.createdAt || new Date().toISOString(),
+      updatedAt: newHabit.updatedAt || new Date().toISOString(),
+      reminder: newHabit.reminder || { enabled: false, time: '00:00', message: '' },
     };
-    
     setHabits([...habits, habitWithDefaults]);
-    // Toast is already shown in the modal component
+    if (onHabitCreated) onHabitCreated(habitWithDefaults); // Trigger on habit created callback
+    toast.success('Habit created successfully!');
   };
 
-  const handleReminderChange = (id, field, value) => {
-    setReminders((prevReminders) =>
-      prevReminders.map((reminder) =>
-        reminder.id === id ? { ...reminder, [field]: value } : reminder
+
+  const handleReminderChange = (habitId: string, field: keyof Reminder, value: string | boolean) => {
+    setHabits(prevHabits =>
+      prevHabits.map(habit =>
+        habit._id === habitId
+          ? { ...habit, reminder: { ...habit.reminder, [field]: value } }
+          : habit
       )
     );
   };
 
-  const toggleReminder = (id) => {
-    setReminders((prevReminders) =>
-      prevReminders.map((reminder) =>
-        reminder.id === id ? { ...reminder, enabled: !reminder.enabled } : reminder
+  const toggleReminder = (habitId: string) => {
+    setHabits(prevHabits =>
+      prevHabits.map(habit =>
+        habit._id === habitId
+          ? { ...habit, reminder: { ...habit.reminder, enabled: !habit.reminder.enabled } }
+          : habit
       )
     );
   };
-
-  const markAsCompleted = (id) => {
-    setReminders((prevReminders) =>
-      prevReminders.map((reminder) =>
-        reminder.id === id ? { ...reminder, completed: true } : reminder
-      )
-    );
-  };
+  
 
   return (
-    <div className={`min-h-screen relative overflow-hidden ${
-      theme === 'dark' 
-        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-700' 
-        : 'bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100'
-    }`}>
-      <AnimatedBackground />
-  
+    <div
+      className={`min-h-screen relative overflow-hidden ${
+        theme === 'dark'
+          ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-700'
+          : 'bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100'
+      }`}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-      <motion.div
-  initial={{ opacity: 0, y: -50 }}
-  animate={{ opacity: 1, y: 0 }}
-  transition={{ duration: 0.5 }}
-  className="py-12"
->
-  <div className="w-full flex flex-col items-start px-4 gap-4">
-    {/* Heading and buttons wrapper */}
-    <div className="w-full flex flex-wrap items-center justify-between gap-4">
-      {/* Heading */}
-      <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white">
-        Habits Tracker
-      </h1>
-
-      {/* Action buttons */}
-      <div className="flex items-center gap-3">
-        {/* Add Habit button with icon only */}
-        <button
-          onClick={() => setIsAddHabitModalOpen(true)}
-          className="p-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white shadow-md"
-          aria-label="Add Habit"
+        <motion.div
+          initial={{ opacity: 0, y: -50 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="py-12"
         >
-          <PlusCircle className="w-5 h-5" />
-        </button>
-
-        {/* Theme toggle button */}
-        <button
-          onClick={toggleTheme}
-          className={`p-2 rounded-full transition-colors duration-200 ${
-            theme === 'dark'
-              ? 'bg-gray-700 hover:bg-gray-600 text-yellow-300'
-              : 'bg-indigo-200 hover:bg-indigo-300 text-gray-800'
-          }`}
-          aria-label="Toggle Theme"
-        >
-          {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-        </button>
-      </div>
-    </div>
-
-    {/* Subtitle paragraph – visible from sm screens up and left-aligned */}
-    <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 hidden sm:block text-left">
-      Track your daily progress and build better habits
-    </p>
-  </div>
-</motion.div>
-
-
+          <div className="w-full flex flex-col items-start px-4 gap-4">
+            <div className="w-full flex flex-wrap items-center justify-between gap-4">
+              <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white">
+                Habits Tracker
+              </h1>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsAddHabitModalOpen(true)}
+                  className="p-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white shadow-md"
+                  aria-label="Add Habit"
+                >
+                  {/* Assuming PlusCircle is an imported icon */}
+                  <PlusCircle className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={toggleTheme}
+                  className={`p-2 rounded-full transition-colors duration-200 ${
+                    theme === 'dark'
+                      ? 'bg-gray-700 hover:bg-gray-600 text-yellow-300'
+                      : 'bg-indigo-200 hover:bg-indigo-300 text-gray-800'
+                  }`}
+                  aria-label="Toggle Theme"
+                >
+                  {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+                </button>
+              </div>
+            </div>
+            <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 hidden sm:block text-left">
+              Track your daily progress and build better habits
+            </p>
+          </div>
+        </motion.div>
 
         <AnimatePresence>
           {isLoading ? (
@@ -1363,19 +1585,22 @@ export default function Dashboard() {
               exit={{ opacity: 0 }}
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8"
             >
-              {habits.length > 0 ? habits.map((habit) => (
-                <motion.div
-                  key={habit._id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.3 }}
-                  onClick={() => handleHabitClick(habit)}
-                  className="cursor-pointer"
-                >
-                  <HabitCard habit={habit} />
-                </motion.div>
-              )) : (
+              {habits.length > 0 ? (
+                habits.map((habit) => (
+
+                  <motion.div
+  key={habit._id}
+  initial={{ opacity: 0, scale: 0.9 }}
+  animate={{ opacity: 1, scale: 1 }}
+  exit={{ opacity: 0, scale: 0.9 }}
+  transition={{ duration: 0.3 }}
+  onClick={() => handleHabitClick(habit)}
+  className="cursor-pointer"
+>
+  <HabitCard habit={habit} onClick={() => handleHabitClick(habit)} />
+</motion.div>
+                ))
+              ) : (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -1392,25 +1617,47 @@ export default function Dashboard() {
           )}
         </AnimatePresence>
       </div>
-      
+
       {/* Habit details modal */}
       <AnimatePresence>
         {isModalOpen && (
-          <HabitDetailModal 
-            habit={selectedHabit} 
-            isOpen={isModalOpen} 
-            onClose={handleCloseModal} 
+          <HabitDetailModal
+            habit={selectedHabit}
+            isOpen={isModalOpen}
+            onClose={handleCloseModal}
             onDelete={handleDeleteHabit}
           />
         )}
       </AnimatePresence>
 
       {/* Add habit modal */}
-      <HabitModal 
+      <HabitModal
         isOpen={isAddHabitModalOpen}
         onClose={() => setIsAddHabitModalOpen(false)}
         onHabitCreated={handleHabitCreated}
       />
     </div>
   );
+};
+const RootApp = () => (
+    <ThemeProvider>
+      <Routes>
+        <Route path="/dashboard" element={<Dashboard getHabits={getHabits} />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </ThemeProvider>
+  );
+
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  createRoot(rootElement).render(
+    <BrowserRouter>
+      <Toaster position="top-right" />
+      <RootApp />
+    </BrowserRouter>
+  );
+} else {
+  console.error("Root element not found");
+
 }
+
