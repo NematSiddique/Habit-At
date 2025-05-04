@@ -1538,7 +1538,7 @@ const Dashboard: React.FC<DashboardProps> = ({ getHabits, onHabitCreated, onHabi
           <div className="w-full flex flex-col items-start px-4 gap-4">
             <div className="w-full flex flex-wrap items-center justify-between gap-4">
               <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white">
-                Habits Tracker
+                Habit-AT
               </h1>
               <div className="flex items-center gap-3">
                 <button
@@ -1563,7 +1563,7 @@ const Dashboard: React.FC<DashboardProps> = ({ getHabits, onHabitCreated, onHabi
               </div>
             </div>
             <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 hidden sm:block text-left">
-              Track your daily progress and build better habits
+            Consistency made simple
             </p>
           </div>
         </motion.div>
