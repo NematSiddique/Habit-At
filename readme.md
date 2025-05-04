@@ -6,7 +6,7 @@
 
 Here's a snapshot of the Habit-at Dashboard:
 
-![Habit-at Demo](./assets/demo.gif)
+![Application Preview](.public/demo.gif)
 
 ---
 
